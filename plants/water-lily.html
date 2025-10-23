@@ -1,0 +1,59 @@
+<style>
+    /* Keyframes for a gentle up-and-down bobbing motion */
+    @keyframes bobbing {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-5px); }
+    }
+
+    .lily-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
+        width: 100%;
+        box-sizing: border-box;
+        background-color: #81d4fa; /* Simple water background */
+    }
+
+    .lily-pad {
+        width: 100px;
+        height: 100px;
+        background-color: #8bc34a;
+        border-radius: 50%;
+        position: relative;
+        /* Apply the animation */
+        animation: bobbing 4s ease-in-out infinite; 
+    }
+
+    /* Create the 'slice' or indentation in the pad */
+    .lily-pad::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 20px;
+        height: 50px;
+        background-color: #81d4fa; /* Match background color to create the cutout */
+        transform: rotate(45deg);
+    }
+    
+    /* Simple flower in the center */
+    .lily-flower {
+        width: 30px;
+        height: 30px;
+        background-color: #ffeb3b;
+        border-radius: 50%;
+        position: absolute;
+        top: 35px;
+        left: 35px;
+    }
+</style>
+
+<div class="lily-container">
+    <div class="lily-pad">
+        <div class="lily-flower"></div>
+    </div>
+    <p style="position: absolute; bottom: 5px; right: 5px; font-size: 0.7rem; color: #333;">
+        @example-contributor 💦
+    </p>
+</div>

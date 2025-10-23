@@ -1,0 +1,65 @@
+<style>
+    .rose-container {
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        height: 100%;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px;
+    }
+
+    .rose-stem {
+        width: 10px;
+        height: 70%;
+        background-color: #6a9955;
+        border-radius: 5px 5px 0 0;
+        position: relative;
+    }
+
+    .rose-petal-set {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 50px;
+        height: 50px;
+    }
+
+    .rose-petal {
+        position: absolute;
+        width: 30px;
+        height: 40px;
+        background: radial-gradient(circle, #ff6b6b, #e63946);
+        border-radius: 50% 50% 0 50%;
+        transform-origin: bottom center;
+        opacity: 0.9;
+    }
+
+    /* Rotate and position individual petals */
+    .rose-petal:nth-child(1) { transform: rotate(-60deg) translateX(-15px); }
+    .rose-petal:nth-child(2) { transform: rotate(-15deg); }
+    .rose-petal:nth-child(3) { transform: rotate(30deg) translateX(15px); }
+    .rose-petal:nth-child(4) { 
+        width: 40px; 
+        height: 50px; 
+        background-color: #ffb3b3; 
+        border-radius: 50%;
+        transform: translateY(-20px);
+        z-index: -1; 
+    }
+</style>
+
+<div class="rose-container">
+    <div class="rose-stem">
+        <div class="rose-petal-set">
+            <div class="rose-petal"></div>
+            <div class="rose-petal"></div>
+            <div class="rose-petal"></div>
+            <div class="rose-petal"></div>
+        </div>
+    </div>
+    <p style="position: absolute; bottom: 5px; right: 5px; font-size: 0.7rem; color: #555;">
+        @alice-rose 🌹
+    </p>
+</div>

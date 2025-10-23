@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Open Web Garden</title>
+    <link rel="stylesheet" href="style.css"> 
+</head>
+<body>
+    <header>
+        <h1>🌿 The Open Web Garden</h1>
+        <p>A collaborative landscape grown by the community. Plant your creation using data-row and data-col!</p>
+    </header>
+
+    <main id="garden">
+        </main>
+
+    <footer>
+        <p>Project by <a href="https://github.com/theopenwebgarden">@theopenwebgarden</a> | <a href="README.md">View Contribution Guide</a></p>
+    </footer>
+
+    <script>
+        // 1. LIST OF ALL PLANT FILES (Based on your folder structure)
+        const plantFiles = [
+            "plants/alice-rose.html",
+            "plants/bob-cactus.html",
+            "plants/theopenwebgarden-plant.html", 
+            "plants/water-lily.html"
+        ];
+
+        const gardenContainer = document.getElementById('garden');
+
+        async function loadPlants() {
+            for (const file of plantFiles) {
+                try {
+                    // Fetch the plant's self-contained HTML/CSS
+                    const response = await fetch(file);
+                    const plantHTML = await response.text();
+                    
+                    // Create the wrapper/tile for the content
+                    const plantWrapper = document.createElement('div');
+                    plantWrapper.classList.add('plant-tile');
+                    
+                    // Inject the content (which we will then parse for coordinates)
+                    plantWrapper.innerHTML = plantHTML;
+                    
+                    // --- NEW LOGIC: Read and apply coordinates ---
+                    // Select the first element inside the wrapper (which is the plant's main div)
+                    const contentDiv = plantWrapper.querySelector(':first-child');
+                    
+                    if (contentDiv) {
+                        // Read the data-row and data-col attributes
+                        const row = contentDiv.getAttribute('data-row');
+                        const col = contentDiv.getAttribute('data-col');
+
+                        // If coordinates exist, set the CSS Custom Properties on the tile wrapper
+                        if (row) {
+                            plantWrapper.style.setProperty('--owg-row', row);
+                        }
+                        if (col) {
+                            plantWrapper.style.setProperty('--owg-col', col);
+                        }
+                    }
+                    // --- END NEW LOGIC ---
+                    
+                    // Add the tile to the garden
+                    gardenContainer.appendChild(plantWrapper);
+
+                } catch (error) {
+                    console.error(`Error loading plant file: ${file}`, error);
+                    // Show a message if a file is missing or failed to load
+                    gardenContainer.innerHTML += `<div class="plant-tile error">Missing or broken: ${file}</div>`;
+                }
+            }
+        }
+
+        // Wait until the page is fully loaded before running the plant fetcher
+        window.onload = loadPlants; 
+    </script>
+</body>
+</html>
