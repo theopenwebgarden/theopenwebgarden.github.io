@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Open Web Garden: Live Community Wall</title>
+    <title>The Local Session Wall</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load Inter Font -->
@@ -32,21 +32,14 @@
         
         <!-- Header -->
         <header class="p-6 bg-green-600 text-white rounded-t-xl">
-            <h1 class="text-3xl font-bold tracking-tight">Community Wall</h1>
-            <p class="text-green-200 mt-1">Share ideas, links, or hellos with the Open Web Garden community!</p>
+            <h1 class="text-3xl font-bold tracking-tight">Local Session Wall</h1>
+            <p class="text-green-200 mt-1">Messages are saved only in your browser (no external API).</p>
         </header>
 
         <!-- User Info and Status -->
         <div id="status" class="p-4 bg-green-50 text-green-700 text-sm border-b border-green-200">
-            <div id="loading-spinner" class="flex items-center">
-                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Connecting...
-            </div>
-            <p id="user-info" class="hidden font-medium">
-                Connected as User ID: <span id="user-id" class="text-green-900 font-mono text-xs p-1 bg-green-100 rounded"></span>
+            <p id="user-info" class="font-medium">
+                Status: <span class="font-bold text-green-800">Local Only</span> | Your ID: <span id="user-id" class="text-green-900 font-mono text-xs p-1 bg-green-100 rounded"></span>
             </p>
         </div>
 
@@ -61,58 +54,49 @@
             <!-- Message Input Form -->
             <form id="message-form" class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
                 <textarea id="message-input" required placeholder="Type your message here..." class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 transition duration-150 resize-none h-20 sm:h-auto" rows="3"></textarea>
-                <button type="submit" id="submit-button" class="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-200 transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                <button type="submit" id="submit-button" class="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-200 transform hover:scale-105">
                     Post Message
                 </button>
             </form>
+            <div class="mt-4 text-center">
+                 <button type="button" onclick="clearAllMessages()" class="text-sm text-red-500 hover:text-red-700 transition">Clear All Messages (Local Storage)</button>
+            </div>
         </main>
     </div>
 
     <!-- Error/Confirmation Modal -->
     <div id="modal-container" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 transition-opacity duration-300">
         <div id="modal-box" class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full transform scale-95 transition-transform duration-300">
-            <h3 id="modal-title" class="text-lg font-bold mb-3 text-red-600">Error</h3>
+            <h3 id="modal-title" class="text-lg font-bold mb-3 text-red-600">Action Complete</h3>
             <p id="modal-message" class="text-gray-700"></p>
-            <button onclick="closeModal()" class="mt-4 w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-700 transition">Close</button>
+            <button onclick="closeModal()" class="mt-4 w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-700 transition">Close</button>
         </div>
     </div>
 
 
-    <!-- Firebase Core Modules -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // Constants for Local Storage Keys
+        const STORAGE_KEY_MESSAGES = 'localSessionMessages';
+        const STORAGE_KEY_USER_ID = 'localSessionUserId';
 
-        // Global variables provided by the Canvas environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        let db, auth;
         let userId = null;
-        let isAuthReady = false;
-
-        setLogLevel('Debug'); // Enable detailed logging
+        let messages = [];
 
         const messageForm = document.getElementById('message-form');
         const messageInput = document.getElementById('message-input');
         const messagesContainer = document.getElementById('messages');
         const emptyState = document.getElementById('empty-state');
-        const statusElement = document.getElementById('status');
-        const loadingSpinner = document.getElementById('loading-spinner');
-        const userInfoElement = document.getElementById('user-info');
         const userIdElement = document.getElementById('user-id');
-        const submitButton = document.getElementById('submit-button');
 
         // --- Modal Functions ---
         const modalContainer = document.getElementById('modal-container');
         const modalTitle = document.getElementById('modal-title');
         const modalMessage = document.getElementById('modal-message');
 
-        window.showModal = function(title, message, isError = true) {
+        window.showModal = function(title, message, isError = false) {
             modalTitle.textContent = title;
             modalMessage.textContent = message;
+            // Use green for non-error success/info messages
             modalTitle.className = isError ? 'text-lg font-bold mb-3 text-red-600' : 'text-lg font-bold mb-3 text-green-600';
             document.getElementById('modal-box').className = 'bg-white p-6 rounded-lg shadow-xl max-w-sm w-full transform scale-100 transition-transform duration-300';
             modalContainer.classList.remove('hidden');
@@ -122,144 +106,78 @@
             modalContainer.classList.add('hidden');
         }
 
-        // --- Utility Functions ---
+        // --- Local Storage Management ---
 
-        // Function to safely retry a Firebase operation with exponential backoff
-        async function withExponentialBackoff(fn) {
-            const MAX_RETRIES = 5;
-            let delay = 1000;
-
-            for (let i = 0; i < MAX_RETRIES; i++) {
-                try {
-                    return await fn();
-                } catch (error) {
-                    if (i === MAX_RETRIES - 1) {
-                        console.error('Max retries reached. Operation failed.', error);
-                        throw error;
-                    }
-                    // Wait for the calculated delay
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 2; // Double the delay for the next attempt
-                }
+        /**
+         * Loads the unique user ID from local storage, creating one if it doesn't exist.
+         */
+        function getLocalUserId() {
+            let storedId = localStorage.getItem(STORAGE_KEY_USER_ID);
+            if (!storedId) {
+                // Generate a consistent, unique ID for the user's browser
+                storedId = crypto.randomUUID().substring(0, 12); 
+                localStorage.setItem(STORAGE_KEY_USER_ID, storedId);
             }
+            userId = storedId;
+            userIdElement.textContent = storedId;
         }
 
-        // --- Firebase Initialization and Authentication ---
-
-        function initializeFirebase() {
+        /**
+         * Loads messages from local storage.
+         */
+        function loadMessages() {
             try {
-                if (Object.keys(firebaseConfig).length === 0) {
-                    throw new Error("Firebase configuration is missing. Cannot proceed with real-time features.");
-                }
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                // Set up auth state change listener
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        userIdElement.textContent = userId;
-                        userInfoElement.classList.remove('hidden');
-                        loadingSpinner.classList.add('hidden');
-                        submitButton.disabled = false;
-                        isAuthReady = true;
-                        console.log("Authentication successful. User ID:", userId);
-                    } else {
-                        // Attempt to sign in if no user is present
-                        await authenticateUser();
-                    }
-                });
-
-            } catch (error) {
-                console.error("Failed to initialize Firebase:", error);
-                showModal("Initialization Error", `Could not connect to the real-time service: ${error.message}. Please check console for details.`, true);
-                loadingSpinner.textContent = 'Disconnected';
-                submitButton.disabled = true;
+                const storedMessages = localStorage.getItem(STORAGE_KEY_MESSAGES);
+                messages = storedMessages ? JSON.parse(storedMessages) : [];
+            } catch (e) {
+                console.error("Error loading messages from localStorage:", e);
+                messages = [];
             }
+            renderMessages();
         }
 
-        async function authenticateUser() {
+        /**
+         * Saves the current message array to local storage.
+         */
+        function saveMessages() {
             try {
-                await withExponentialBackoff(async () => {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        console.log("Signed in with custom token.");
-                    } else {
-                        await signInAnonymously(auth);
-                        console.log("Signed in anonymously.");
-                    }
-                });
-            } catch (error) {
-                console.error("Authentication failed:", error);
-                showModal("Authentication Error", `Failed to sign in. Live features are disabled. Error: ${error.message}`, true);
-                loadingSpinner.textContent = 'Authentication Failed';
-                submitButton.disabled = true;
-                isAuthReady = false;
+                // Sort messages by timestamp (descending) before saving, though rendering handles it
+                messages.sort((a, b) => b.timestamp - a.timestamp);
+                localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(messages));
+            } catch (e) {
+                console.error("Error saving messages to localStorage:", e);
+                showModal("Local Storage Error", "Failed to save message due to browser storage limits.", true);
             }
         }
 
-        // --- Data Management (Firestore) ---
-
-        const PUBLIC_COLLECTION_PATH = `artifacts/${appId}/public/data/live_messages`;
-
-        function setupRealtimeListener() {
-            if (!db || !isAuthReady) return;
-
-            const q = query(
-                collection(db, PUBLIC_COLLECTION_PATH),
-                // Sorting by timestamp to display newest messages at the bottom/end of the container
-                orderBy('timestamp', 'desc') 
-            );
-
-            // Use onSnapshot for real-time updates
-            onSnapshot(q, (querySnapshot) => {
-                messagesContainer.innerHTML = ''; // Clear existing messages
-                const messages = [];
-
-                if (querySnapshot.empty) {
-                    emptyState.classList.remove('hidden');
-                } else {
-                    emptyState.classList.add('hidden');
-                    querySnapshot.forEach((doc) => {
-                        messages.push({ id: doc.id, ...doc.data() });
-                    });
-
-                    // Render messages
-                    messages.reverse().forEach(message => {
-                        messagesContainer.appendChild(createMessageElement(message));
-                    });
-                    
-                    // Scroll to the bottom to see the newest message
-                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                }
-            }, (error) => {
-                console.error("Error listening to Firestore:", error);
-                showModal("Realtime Error", `Failed to load messages: ${error.message}. Please refresh.`, true);
-            });
+        /**
+         * Clears all messages from the array and local storage.
+         */
+        window.clearAllMessages = function() {
+            messages = [];
+            localStorage.removeItem(STORAGE_KEY_MESSAGES);
+            renderMessages();
+            showModal("Messages Cleared", "All local messages have been successfully removed.", false);
         }
+
+        // --- Rendering ---
 
         function createMessageElement(data) {
             const messageEl = document.createElement('div');
-            messageEl.className = 'p-4 rounded-xl shadow-md transition-all duration-300';
             
             // Determine styling based on the current user
             const isMe = data.userId === userId;
             const bgColor = isMe ? 'bg-green-100' : 'bg-white border border-gray-200';
             const alignClass = isMe ? 'text-right' : 'text-left';
 
-            let timestampText = '';
-            if (data.timestamp && data.timestamp.toDate) {
-                const date = data.timestamp.toDate();
-                timestampText = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) + ', ' + date.toLocaleDateString();
-            } else {
-                timestampText = 'Sending...';
-            }
+            // Format timestamp
+            const date = new Date(data.timestamp);
+            const timestampText = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) + ', ' + date.toLocaleDateString();
 
             // Sanitizing text input
             const safeText = data.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             
-            messageEl.className += ` ${bgColor} ${alignClass}`;
+            messageEl.className = `p-4 rounded-xl shadow-md transition-all duration-300 ${bgColor} ${alignClass}`;
             messageEl.innerHTML = `
                 <p class="text-gray-900 whitespace-pre-wrap">${safeText}</p>
                 <div class="mt-2 text-xs ${isMe ? 'text-green-600' : 'text-gray-500'}">
@@ -272,55 +190,63 @@
             return messageEl;
         }
 
-        // --- Event Listener for Form Submission ---
-        messageForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!isAuthReady || !userId) {
-                showModal("Access Denied", "Authentication is not complete. Please wait or refresh the page.", true);
-                return;
-            }
+        function renderMessages() {
+            messagesContainer.innerHTML = '';
+            
+            if (messages.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                
+                // Sort by timestamp ascending for display (oldest first)
+                const sortedMessages = [...messages].sort((a, b) => a.timestamp - b.timestamp);
 
+                sortedMessages.forEach(message => {
+                    messagesContainer.appendChild(createMessageElement(message));
+                });
+                
+                // Scroll to the bottom to see the newest message
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        }
+
+
+        // --- Event Listener for Form Submission ---
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
             const messageText = messageInput.value.trim();
 
             if (!messageText) return;
 
-            submitButton.disabled = true; // Disable button while sending
-
             const newMessage = {
                 text: messageText,
                 userId: userId,
-                timestamp: serverTimestamp()
+                timestamp: new Date().getTime() // Use local JS timestamp
             };
 
-            try {
-                await withExponentialBackoff(() => {
-                    return addDoc(collection(db, PUBLIC_COLLECTION_PATH), newMessage);
-                });
-                messageInput.value = ''; // Clear input on success
-            } catch (error) {
-                console.error("Error adding document: ", error);
-                showModal("Post Failed", `Could not post message: ${error.message}. Please try again.`, true);
-            } finally {
-                submitButton.disabled = false;
-            }
+            // 1. Add new message to the local array
+            messages.push(newMessage);
+            
+            // 2. Save the updated array to local storage
+            saveMessages();
+            
+            // 3. Re-render the message list
+            renderMessages();
+
+            messageInput.value = ''; // Clear input
         });
 
         // --- Application Setup ---
         
-        // 1. Initialize Firebase and start authentication flow
-        initializeFirebase();
-
-        // 2. Start listening for data once auth is ready
-        // We use onAuthStateChanged above, which handles setting isAuthReady.
-        // The listener must be set up after db and auth are confirmed available.
-        onAuthStateChanged(auth, (user) => {
-            if (user && isAuthReady) {
-                setupRealtimeListener();
-            }
-        });
+        function initializeLocalApp() {
+            getLocalUserId();
+            loadMessages();
+        }
 
         // Simple scale-in animation on load
         document.addEventListener('DOMContentLoaded', () => {
+            initializeLocalApp();
             const container = document.getElementById('app-container');
             container.style.opacity = 1;
             container.style.transform = 'scale(1)';
