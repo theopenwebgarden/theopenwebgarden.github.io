@@ -3,79 +3,329 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Open Web Garden</title>
-    <link rel="stylesheet" href="style.css"> 
+    <title>The Open Web Garden: Live Community Wall</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7fafc; /* Light gray background */
+        }
+        /* Custom scrollbar for message container */
+        .message-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .message-container::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1; /* Gray-300 */
+            border-radius: 10px;
+        }
+        .message-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+    </style>
 </head>
-<body>
-    <header>
-        <h1>🌿 The Open Web Garden</h1>
-        <p>A collaborative landscape grown by the community. Plant your creation using data-row and data-col!</p>
-    </header>
+<body class="min-h-screen flex items-center justify-center p-4 md:p-8">
 
-    <main id="garden">
+    <div id="app-container" class="w-full max-w-4xl bg-white shadow-2xl rounded-xl overflow-hidden transform transition-all duration-500 scale-100 opacity-0" style="opacity: 1;">
+        
+        <!-- Header -->
+        <header class="p-6 bg-green-600 text-white rounded-t-xl">
+            <h1 class="text-3xl font-bold tracking-tight">Community Wall</h1>
+            <p class="text-green-200 mt-1">Share ideas, links, or hellos with the Open Web Garden community!</p>
+        </header>
+
+        <!-- User Info and Status -->
+        <div id="status" class="p-4 bg-green-50 text-green-700 text-sm border-b border-green-200">
+            <div id="loading-spinner" class="flex items-center">
+                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Connecting...
+            </div>
+            <p id="user-info" class="hidden font-medium">
+                Connected as User ID: <span id="user-id" class="text-green-900 font-mono text-xs p-1 bg-green-100 rounded"></span>
+            </p>
+        </div>
+
+        <!-- Main Content Area -->
+        <main class="p-6">
+            <!-- Message List -->
+            <div id="messages" class="message-container h-80 overflow-y-auto space-y-4 mb-6 p-2 bg-gray-50 rounded-lg border">
+                <!-- Messages will be injected here -->
+                <p id="empty-state" class="text-center text-gray-500 italic p-10">No messages yet. Be the first to post!</p>
+            </div>
+
+            <!-- Message Input Form -->
+            <form id="message-form" class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
+                <textarea id="message-input" required placeholder="Type your message here..." class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 transition duration-150 resize-none h-20 sm:h-auto" rows="3"></textarea>
+                <button type="submit" id="submit-button" class="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-200 transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    Post Message
+                </button>
+            </form>
         </main>
+    </div>
 
-    <footer>
-        <p>Project by <a href="https://github.com/theopenwebgarden">@theopenwebgarden</a> | <a href="README.md">View Contribution Guide</a></p>
-    </footer>
+    <!-- Error/Confirmation Modal -->
+    <div id="modal-container" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 transition-opacity duration-300">
+        <div id="modal-box" class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full transform scale-95 transition-transform duration-300">
+            <h3 id="modal-title" class="text-lg font-bold mb-3 text-red-600">Error</h3>
+            <p id="modal-message" class="text-gray-700"></p>
+            <button onclick="closeModal()" class="mt-4 w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-700 transition">Close</button>
+        </div>
+    </div>
 
-    <script>
-        // 1. LIST OF ALL PLANT FILES (Based on your folder structure)
-        const plantFiles = [
-            "plants/alice-rose.html",
-            "plants/bob-cactus.html",
-            "plants/theopenwebgarden-plant.html", 
-            "plants/water-lily.html"
-        ];
 
-        const gardenContainer = document.getElementById('garden');
+    <!-- Firebase Core Modules -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        async function loadPlants() {
-            for (const file of plantFiles) {
+        // Global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth;
+        let userId = null;
+        let isAuthReady = false;
+
+        setLogLevel('Debug'); // Enable detailed logging
+
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+        const messagesContainer = document.getElementById('messages');
+        const emptyState = document.getElementById('empty-state');
+        const statusElement = document.getElementById('status');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const userInfoElement = document.getElementById('user-info');
+        const userIdElement = document.getElementById('user-id');
+        const submitButton = document.getElementById('submit-button');
+
+        // --- Modal Functions ---
+        const modalContainer = document.getElementById('modal-container');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+
+        window.showModal = function(title, message, isError = true) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modalTitle.className = isError ? 'text-lg font-bold mb-3 text-red-600' : 'text-lg font-bold mb-3 text-green-600';
+            document.getElementById('modal-box').className = 'bg-white p-6 rounded-lg shadow-xl max-w-sm w-full transform scale-100 transition-transform duration-300';
+            modalContainer.classList.remove('hidden');
+        }
+
+        window.closeModal = function() {
+            modalContainer.classList.add('hidden');
+        }
+
+        // --- Utility Functions ---
+
+        // Function to safely retry a Firebase operation with exponential backoff
+        async function withExponentialBackoff(fn) {
+            const MAX_RETRIES = 5;
+            let delay = 1000;
+
+            for (let i = 0; i < MAX_RETRIES; i++) {
                 try {
-                    // Fetch the plant's self-contained HTML/CSS
-                    const response = await fetch(file);
-                    const plantHTML = await response.text();
-                    
-                    // Create the wrapper/tile for the content
-                    const plantWrapper = document.createElement('div');
-                    plantWrapper.classList.add('plant-tile');
-                    
-                    // Inject the content (which we will then parse for coordinates)
-                    plantWrapper.innerHTML = plantHTML;
-                    
-                    // --- NEW LOGIC: Read and apply coordinates ---
-                    // Select the first element inside the wrapper (which is the plant's main div)
-                    const contentDiv = plantWrapper.querySelector(':first-child');
-                    
-                    if (contentDiv) {
-                        // Read the data-row and data-col attributes
-                        const row = contentDiv.getAttribute('data-row');
-                        const col = contentDiv.getAttribute('data-col');
-
-                        // If coordinates exist, set the CSS Custom Properties on the tile wrapper
-                        if (row) {
-                            plantWrapper.style.setProperty('--owg-row', row);
-                        }
-                        if (col) {
-                            plantWrapper.style.setProperty('--owg-col', col);
-                        }
-                    }
-                    // --- END NEW LOGIC ---
-                    
-                    // Add the tile to the garden
-                    gardenContainer.appendChild(plantWrapper);
-
+                    return await fn();
                 } catch (error) {
-                    console.error(`Error loading plant file: ${file}`, error);
-                    // Show a message if a file is missing or failed to load
-                    gardenContainer.innerHTML += `<div class="plant-tile error">Missing or broken: ${file}</div>`;
+                    if (i === MAX_RETRIES - 1) {
+                        console.error('Max retries reached. Operation failed.', error);
+                        throw error;
+                    }
+                    // Wait for the calculated delay
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; // Double the delay for the next attempt
                 }
             }
         }
 
-        // Wait until the page is fully loaded before running the plant fetcher
-        window.onload = loadPlants; 
+        // --- Firebase Initialization and Authentication ---
+
+        function initializeFirebase() {
+            try {
+                if (Object.keys(firebaseConfig).length === 0) {
+                    throw new Error("Firebase configuration is missing. Cannot proceed with real-time features.");
+                }
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Set up auth state change listener
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userIdElement.textContent = userId;
+                        userInfoElement.classList.remove('hidden');
+                        loadingSpinner.classList.add('hidden');
+                        submitButton.disabled = false;
+                        isAuthReady = true;
+                        console.log("Authentication successful. User ID:", userId);
+                    } else {
+                        // Attempt to sign in if no user is present
+                        await authenticateUser();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Failed to initialize Firebase:", error);
+                showModal("Initialization Error", `Could not connect to the real-time service: ${error.message}. Please check console for details.`, true);
+                loadingSpinner.textContent = 'Disconnected';
+                submitButton.disabled = true;
+            }
+        }
+
+        async function authenticateUser() {
+            try {
+                await withExponentialBackoff(async () => {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        console.log("Signed in with custom token.");
+                    } else {
+                        await signInAnonymously(auth);
+                        console.log("Signed in anonymously.");
+                    }
+                });
+            } catch (error) {
+                console.error("Authentication failed:", error);
+                showModal("Authentication Error", `Failed to sign in. Live features are disabled. Error: ${error.message}`, true);
+                loadingSpinner.textContent = 'Authentication Failed';
+                submitButton.disabled = true;
+                isAuthReady = false;
+            }
+        }
+
+        // --- Data Management (Firestore) ---
+
+        const PUBLIC_COLLECTION_PATH = `artifacts/${appId}/public/data/live_messages`;
+
+        function setupRealtimeListener() {
+            if (!db || !isAuthReady) return;
+
+            const q = query(
+                collection(db, PUBLIC_COLLECTION_PATH),
+                // Sorting by timestamp to display newest messages at the bottom/end of the container
+                orderBy('timestamp', 'desc') 
+            );
+
+            // Use onSnapshot for real-time updates
+            onSnapshot(q, (querySnapshot) => {
+                messagesContainer.innerHTML = ''; // Clear existing messages
+                const messages = [];
+
+                if (querySnapshot.empty) {
+                    emptyState.classList.remove('hidden');
+                } else {
+                    emptyState.classList.add('hidden');
+                    querySnapshot.forEach((doc) => {
+                        messages.push({ id: doc.id, ...doc.data() });
+                    });
+
+                    // Render messages
+                    messages.reverse().forEach(message => {
+                        messagesContainer.appendChild(createMessageElement(message));
+                    });
+                    
+                    // Scroll to the bottom to see the newest message
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+            }, (error) => {
+                console.error("Error listening to Firestore:", error);
+                showModal("Realtime Error", `Failed to load messages: ${error.message}. Please refresh.`, true);
+            });
+        }
+
+        function createMessageElement(data) {
+            const messageEl = document.createElement('div');
+            messageEl.className = 'p-4 rounded-xl shadow-md transition-all duration-300';
+            
+            // Determine styling based on the current user
+            const isMe = data.userId === userId;
+            const bgColor = isMe ? 'bg-green-100' : 'bg-white border border-gray-200';
+            const alignClass = isMe ? 'text-right' : 'text-left';
+
+            let timestampText = '';
+            if (data.timestamp && data.timestamp.toDate) {
+                const date = data.timestamp.toDate();
+                timestampText = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) + ', ' + date.toLocaleDateString();
+            } else {
+                timestampText = 'Sending...';
+            }
+
+            // Sanitizing text input
+            const safeText = data.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            messageEl.className += ` ${bgColor} ${alignClass}`;
+            messageEl.innerHTML = `
+                <p class="text-gray-900 whitespace-pre-wrap">${safeText}</p>
+                <div class="mt-2 text-xs ${isMe ? 'text-green-600' : 'text-gray-500'}">
+                    <span class="font-mono text-[10px] truncate max-w-[80px] inline-block mr-2" title="User ID: ${data.userId}">
+                        ${isMe ? 'You' : data.userId.substring(0, 8) + '...'}
+                    </span>
+                    <span class="text-gray-400">${timestampText}</span>
+                </div>
+            `;
+            return messageEl;
+        }
+
+        // --- Event Listener for Form Submission ---
+        messageForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!isAuthReady || !userId) {
+                showModal("Access Denied", "Authentication is not complete. Please wait or refresh the page.", true);
+                return;
+            }
+
+            const messageText = messageInput.value.trim();
+
+            if (!messageText) return;
+
+            submitButton.disabled = true; // Disable button while sending
+
+            const newMessage = {
+                text: messageText,
+                userId: userId,
+                timestamp: serverTimestamp()
+            };
+
+            try {
+                await withExponentialBackoff(() => {
+                    return addDoc(collection(db, PUBLIC_COLLECTION_PATH), newMessage);
+                });
+                messageInput.value = ''; // Clear input on success
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                showModal("Post Failed", `Could not post message: ${error.message}. Please try again.`, true);
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+
+        // --- Application Setup ---
+        
+        // 1. Initialize Firebase and start authentication flow
+        initializeFirebase();
+
+        // 2. Start listening for data once auth is ready
+        // We use onAuthStateChanged above, which handles setting isAuthReady.
+        // The listener must be set up after db and auth are confirmed available.
+        onAuthStateChanged(auth, (user) => {
+            if (user && isAuthReady) {
+                setupRealtimeListener();
+            }
+        });
+
+        // Simple scale-in animation on load
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('app-container');
+            container.style.opacity = 1;
+            container.style.transform = 'scale(1)';
+        });
+
     </script>
 </body>
 </html>
