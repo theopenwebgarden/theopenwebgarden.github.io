@@ -3,253 +3,149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Local Session Wall</title>
+    <title>Open Web Garden: Collaborative Notepad</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load Inter Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Load Marked.js for Markdown rendering (no API key needed) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f7fafc; /* Light gray background */
+            background-color: #f7fafc;
         }
-        /* Custom scrollbar for message container */
-        .message-container::-webkit-scrollbar {
-            width: 8px;
+        /* Custom styles for rendered markdown */
+        .markdown-content h1, .markdown-content h2 {
+            border-bottom: 2px solid #34d399; /* Green-400 */
+            padding-bottom: 0.3em;
+            margin-top: 1.5em;
         }
-        .message-container::-webkit-scrollbar-thumb {
-            background-color: #cbd5e1; /* Gray-300 */
-            border-radius: 10px;
+        .markdown-content pre {
+            background-color: #e2e8f0; /* Gray-200 */
+            padding: 1em;
+            border-radius: 8px;
+            overflow-x: auto;
         }
-        .message-container::-webkit-scrollbar-track {
-            background: #f1f1f1;
+        .markdown-content blockquote {
+            border-left: 4px solid #10b981; /* Green-500 */
+            color: #4b5563; /* Gray-600 */
+            margin: 1.5em 0;
+            padding: 0.5em 1em;
         }
     </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4 md:p-8">
 
-    <div id="app-container" class="w-full max-w-4xl bg-white shadow-2xl rounded-xl overflow-hidden transform transition-all duration-500 scale-100 opacity-0" style="opacity: 1;">
+    <div id="app-container" class="w-full max-w-4xl bg-white shadow-2xl rounded-xl transform transition-all duration-500 scale-100 opacity-0" style="opacity: 1;">
         
         <!-- Header -->
         <header class="p-6 bg-green-600 text-white rounded-t-xl">
-            <h1 class="text-3xl font-bold tracking-tight">Local Session Wall</h1>
-            <p class="text-green-200 mt-1">Messages are saved only in your browser (no external API).</p>
+            <h1 class="text-3xl font-bold tracking-tight">The Open Web Garden Notepad</h1>
+            <p class="text-green-200 mt-1">Reading from <code class="font-mono">/NOTES.md</code> in the repository. Click 'Contribute' to edit!</p>
         </header>
 
-        <!-- User Info and Status -->
-        <div id="status" class="p-4 bg-green-50 text-green-700 text-sm border-b border-green-200">
-            <p id="user-info" class="font-medium">
-                Status: <span class="font-bold text-green-800">Local Only</span> | Your ID: <span id="user-id" class="text-green-900 font-mono text-xs p-1 bg-green-100 rounded"></span>
-            </p>
+        <!-- Status -->
+        <div id="status" class="p-4 bg-green-50 text-green-700 text-sm border-b border-green-200 flex justify-between items-center">
+            <span id="update-status" class="font-medium">Loading content...</span>
+            <button id="refresh-button" class="text-green-700 hover:text-green-900 flex items-center transition" onclick="fetchContent()">
+                <svg class="w-4 h-4 mr-1 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0020 13a8.001 8.001 0 00-15.356-2m15.356 2H20v-5m-4 5l-4-4-4 4"></path></svg>
+                Refresh
+            </button>
         </div>
 
         <!-- Main Content Area -->
         <main class="p-6">
-            <!-- Message List -->
-            <div id="messages" class="message-container h-80 overflow-y-auto space-y-4 mb-6 p-2 bg-gray-50 rounded-lg border">
-                <!-- Messages will be injected here -->
-                <p id="empty-state" class="text-center text-gray-500 italic p-10">No messages yet. Be the first to post!</p>
+            <!-- Markdown Content Display -->
+            <div id="markdown-display" class="markdown-content min-h-[300px] p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <!-- Content will be rendered here -->
+                <p id="loading-message" class="text-center text-gray-500 italic p-10">Fetching content from GitHub...</p>
             </div>
 
-            <!-- Message Input Form -->
-            <form id="message-form" class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-                <textarea id="message-input" required placeholder="Type your message here..." class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 transition duration-150 resize-none h-20 sm:h-auto" rows="3"></textarea>
-                <button type="submit" id="submit-button" class="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-200 transform hover:scale-105">
-                    Post Message
-                </button>
-            </form>
-            <div class="mt-4 text-center">
-                 <button type="button" onclick="clearAllMessages()" class="text-sm text-red-500 hover:text-red-700 transition">Clear All Messages (Local Storage)</button>
+            <!-- Contribution Button -->
+            <div class="mt-6 text-center">
+                <a id="contribute-link" target="_blank" class="inline-block px-8 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-200 transform hover:scale-105 cursor-pointer">
+                    Contribute via Pull Request (Edit NOTES.md)
+                </a>
+                <p class="text-sm text-gray-500 mt-2">This link opens the file directly on GitHub for you to edit.</p>
             </div>
         </main>
     </div>
 
-    <!-- Error/Confirmation Modal -->
-    <div id="modal-container" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 transition-opacity duration-300">
-        <div id="modal-box" class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full transform scale-95 transition-transform duration-300">
-            <h3 id="modal-title" class="text-lg font-bold mb-3 text-red-600">Action Complete</h3>
-            <p id="modal-message" class="text-gray-700"></p>
-            <button onclick="closeModal()" class="mt-4 w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-700 transition">Close</button>
-        </div>
-    </div>
-
-
     <script type="module">
-        // Constants for Local Storage Keys
-        const STORAGE_KEY_MESSAGES = 'localSessionMessages';
-        const STORAGE_KEY_USER_ID = 'localSessionUserId';
+        // --- CONFIGURATION ---
+        const GITHUB_USERNAME = 'theopenwebgarden'; // Your GitHub username
+        const REPO_NAME = 'theopenwebgarden.github.io'; // Your repository name
+        const FILE_PATH = 'NOTES.md'; // The file where collaborative data lives
+        
+        // Construct the raw file URL and the contribution URL
+        const RAW_FILE_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${REPO_NAME}/main/${FILE_PATH}`;
+        const CONTRIBUTION_URL = `https://github.com/${GITHUB_USERNAME}/${REPO_NAME}/edit/main/${FILE_PATH}`;
 
-        let userId = null;
-        let messages = [];
+        // --- DOM Elements ---
+        const markdownDisplay = document.getElementById('markdown-display');
+        const updateStatus = document.getElementById('update-status');
+        const contributeLink = document.getElementById('contribute-link');
 
-        const messageForm = document.getElementById('message-form');
-        const messageInput = document.getElementById('message-input');
-        const messagesContainer = document.getElementById('messages');
-        const emptyState = document.getElementById('empty-state');
-        const userIdElement = document.getElementById('user-id');
-
-        // --- Modal Functions ---
-        const modalContainer = document.getElementById('modal-container');
-        const modalTitle = document.getElementById('modal-title');
-        const modalMessage = document.getElementById('modal-message');
-
-        window.showModal = function(title, message, isError = false) {
-            modalTitle.textContent = title;
-            modalMessage.textContent = message;
-            // Use green for non-error success/info messages
-            modalTitle.className = isError ? 'text-lg font-bold mb-3 text-red-600' : 'text-lg font-bold mb-3 text-green-600';
-            document.getElementById('modal-box').className = 'bg-white p-6 rounded-lg shadow-xl max-w-sm w-full transform scale-100 transition-transform duration-300';
-            modalContainer.classList.remove('hidden');
-        }
-
-        window.closeModal = function() {
-            modalContainer.classList.add('hidden');
-        }
-
-        // --- Local Storage Management ---
+        // Set the contribution link dynamically
+        contributeLink.href = CONTRIBUTION_URL;
 
         /**
-         * Loads the unique user ID from local storage, creating one if it doesn't exist.
+         * Fetches the raw content of the file from GitHub.
          */
-        function getLocalUserId() {
-            let storedId = localStorage.getItem(STORAGE_KEY_USER_ID);
-            if (!storedId) {
-                // Generate a consistent, unique ID for the user's browser
-                storedId = crypto.randomUUID().substring(0, 12); 
-                localStorage.setItem(STORAGE_KEY_USER_ID, storedId);
-            }
-            userId = storedId;
-            userIdElement.textContent = storedId;
-        }
-
-        /**
-         * Loads messages from local storage.
-         */
-        function loadMessages() {
+        window.fetchContent = async function() {
+            updateStatus.textContent = 'Fetching latest content...';
+            markdownDisplay.innerHTML = '<p class="text-center text-gray-500 italic p-10">Fetching content from GitHub...</p>';
+            
             try {
-                const storedMessages = localStorage.getItem(STORAGE_KEY_MESSAGES);
-                messages = storedMessages ? JSON.parse(storedMessages) : [];
-            } catch (e) {
-                console.error("Error loading messages from localStorage:", e);
-                messages = [];
-            }
-            renderMessages();
-        }
-
-        /**
-         * Saves the current message array to local storage.
-         */
-        function saveMessages() {
-            try {
-                // Sort messages by timestamp (descending) before saving, though rendering handles it
-                messages.sort((a, b) => b.timestamp - a.timestamp);
-                localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(messages));
-            } catch (e) {
-                console.error("Error saving messages to localStorage:", e);
-                showModal("Local Storage Error", "Failed to save message due to browser storage limits.", true);
-            }
-        }
-
-        /**
-         * Clears all messages from the array and local storage.
-         */
-        window.clearAllMessages = function() {
-            messages = [];
-            localStorage.removeItem(STORAGE_KEY_MESSAGES);
-            renderMessages();
-            showModal("Messages Cleared", "All local messages have been successfully removed.", false);
-        }
-
-        // --- Rendering ---
-
-        function createMessageElement(data) {
-            const messageEl = document.createElement('div');
-            
-            // Determine styling based on the current user
-            const isMe = data.userId === userId;
-            const bgColor = isMe ? 'bg-green-100' : 'bg-white border border-gray-200';
-            const alignClass = isMe ? 'text-right' : 'text-left';
-
-            // Format timestamp
-            const date = new Date(data.timestamp);
-            const timestampText = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) + ', ' + date.toLocaleDateString();
-
-            // Sanitizing text input
-            const safeText = data.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            
-            messageEl.className = `p-4 rounded-xl shadow-md transition-all duration-300 ${bgColor} ${alignClass}`;
-            messageEl.innerHTML = `
-                <p class="text-gray-900 whitespace-pre-wrap">${safeText}</p>
-                <div class="mt-2 text-xs ${isMe ? 'text-green-600' : 'text-gray-500'}">
-                    <span class="font-mono text-[10px] truncate max-w-[80px] inline-block mr-2" title="User ID: ${data.userId}">
-                        ${isMe ? 'You' : data.userId.substring(0, 8) + '...'}
-                    </span>
-                    <span class="text-gray-400">${timestampText}</span>
-                </div>
-            `;
-            return messageEl;
-        }
-
-        function renderMessages() {
-            messagesContainer.innerHTML = '';
-            
-            if (messages.length === 0) {
-                emptyState.classList.remove('hidden');
-            } else {
-                emptyState.classList.add('hidden');
+                const response = await fetch(RAW_FILE_URL);
                 
-                // Sort by timestamp ascending for display (oldest first)
-                const sortedMessages = [...messages].sort((a, b) => a.timestamp - b.timestamp);
-
-                sortedMessages.forEach(message => {
-                    messagesContainer.appendChild(createMessageElement(message));
-                });
-                
-                // Scroll to the bottom to see the newest message
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                if (response.ok) {
+                    const markdownText = await response.text();
+                    
+                    // Render the Markdown using Marked.js
+                    const htmlContent = marked.parse(markdownText);
+                    markdownDisplay.innerHTML = htmlContent;
+                    
+                    updateStatus.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+                } else if (response.status === 404) {
+                    markdownDisplay.innerHTML = `
+                        <p class="text-center text-red-500 font-semibold p-10">
+                            Error: File '${FILE_PATH}' not found in the repository.
+                        </p>
+                        <p class="text-center text-gray-600">
+                            Please create a file named <code class="font-mono">${FILE_PATH}</code> in the root of your repository to start collaborating!
+                        </p>
+                    `;
+                    updateStatus.textContent = 'Error: File not found.';
+                } else {
+                    throw new Error(`HTTP Error ${response.status}`);
+                }
+            } catch (error) {
+                console.error("Error fetching GitHub content:", error);
+                markdownDisplay.innerHTML = `
+                    <p class="text-center text-red-500 font-semibold p-10">
+                        Connection Error. Could not fetch content from GitHub.
+                    </p>
+                    <p class="text-center text-gray-600">
+                        Check your internet connection or the repository settings.
+                    </p>
+                `;
+                updateStatus.textContent = 'Error fetching content.';
             }
         }
-
-
-        // --- Event Listener for Form Submission ---
-        messageForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            
-            const messageText = messageInput.value.trim();
-
-            if (!messageText) return;
-
-            const newMessage = {
-                text: messageText,
-                userId: userId,
-                timestamp: new Date().getTime() // Use local JS timestamp
-            };
-
-            // 1. Add new message to the local array
-            messages.push(newMessage);
-            
-            // 2. Save the updated array to local storage
-            saveMessages();
-            
-            // 3. Re-render the message list
-            renderMessages();
-
-            messageInput.value = ''; // Clear input
-        });
 
         // --- Application Setup ---
-        
-        function initializeLocalApp() {
-            getLocalUserId();
-            loadMessages();
-        }
-
-        // Simple scale-in animation on load
         document.addEventListener('DOMContentLoaded', () => {
-            initializeLocalApp();
             const container = document.getElementById('app-container');
             container.style.opacity = 1;
             container.style.transform = 'scale(1)';
+            
+            // Initial content load
+            fetchContent();
+            
+            // Set up a simple auto-refresh every 60 seconds (improves "live" feel)
+            setInterval(fetchContent, 60000); 
         });
 
     </script>
